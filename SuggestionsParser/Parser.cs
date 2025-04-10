@@ -17,10 +17,8 @@ internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> s
     private readonly StringBuilder _url = new();
     private readonly HttpClient _client = new();
 
-    public Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy) : this(queries, suggestions)
-    {
+    public Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy) : this(queries, suggestions) =>
         _client = Utils.CreateHttpClient(proxy);
-    }
 
     public Task StartAsync(CancellationToken token) => Task.Run(async () =>
     {
