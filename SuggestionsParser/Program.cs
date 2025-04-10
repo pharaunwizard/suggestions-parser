@@ -42,6 +42,7 @@ internal class Program
             }
             else
             {
+                Log.Logger.Information("proxies.txt not found. Parsing will be performed without proxies!");
                 var parser = new Parser(queries, suggestions);
                 parsers.Add(parser.StartAsync(tokenSource.Token));
             }
