@@ -6,9 +6,9 @@ public record Proxy
     public string Username { get; }
     public string Password { get; }
 
-    private Proxy(string proxy) : this(new Uri($"socks5://{proxy}")) { }
+    public Proxy(string proxy) : this(new Uri($"socks5://{proxy}")) { }
 
-    private Proxy(Uri uri)
+    public Proxy(Uri uri)
     {
         Uri = uri ?? throw new ArgumentException("uri is null");
 
@@ -21,12 +21,6 @@ public record Proxy
 
         Username = userInfo[0];
         Password = userInfo[1];
-    }
-
-    public static async Task<List<Proxy>> FromFileAsync(string path)
-    {
-        var lines = await File.ReadAllLinesAsync(path);
-        return [.. lines.Select(line => new Proxy(line))];
     }
 }
 
