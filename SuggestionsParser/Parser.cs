@@ -9,7 +9,7 @@ namespace SuggestionsParser;
 
 internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions) : IDisposable
 {
-    private const string Url = $"https://www.google.com/complete/search?client=chrome&hl={Config.UserInterfaceLanguage}";
+    private const string Url = $"https://www.google.com/complete/search?client=chrome&hl={Config.UserInterfaceLanguage}&gl={Config.UserInterfaceLanguage}";
 
     // Calculated empirically to avoid a ban.
     private readonly TimeSpan _delay = TimeSpan.FromMilliseconds(400);
