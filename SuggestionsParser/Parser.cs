@@ -7,16 +7,20 @@ using System.Web;
 
 namespace SuggestionsParser;
 
-internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy) : IDisposable
+internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions) : IDisposable
 {
     private const string Url = $"https://www.google.com/complete/search?client=chrome&hl={Config.UserInterfaceLanguage}";
-
-    private readonly HttpClient _client = Utils.CreateHttpClient(proxy);
 
     // Calculated empirically to avoid a ban.
     private readonly TimeSpan _delay = TimeSpan.FromMilliseconds(400);
 
     private readonly StringBuilder _url = new();
+    private readonly HttpClient _client = new();
+
+    public Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy) : this(queries, suggestions)
+    {
+        _client = Utils.CreateHttpClient(proxy);
+    }
 
     public Task StartAsync(CancellationToken token) => Task.Run(async () =>
     {
@@ -78,7 +82,8 @@ internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> s
         var suggestionString = response[startIndex..endIndex];
         if (suggestionString.Length > 0)
         {
-            suggestions = [.. suggestionString.Split(',').Select(suggestion => suggestion.Replace("\"", string.Empty, StringComparison.Ordinal).Trim())];
+            suggestions = [.. suggestionString.Split(',')
+                .Select(suggestion => suggestion.Replace("\"", string.Empty, StringComparison.Ordinal).Trim())];
         }
 
         return suggestions;
