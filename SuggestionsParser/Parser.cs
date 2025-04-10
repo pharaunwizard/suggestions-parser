@@ -9,9 +9,11 @@ namespace SuggestionsParser;
 
 internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy) : IDisposable
 {
-    private const string Url = "https://www.google.com/complete/search?client=chrome&ds=yt";
+    private const string Url = $"https://www.google.com/complete/search?client=chrome&hl={Config.UserInterfaceLanguage}";
 
     private readonly HttpClient _client = Utils.CreateHttpClient(proxy);
+
+    // Calculated empirically to avoid a ban.
     private readonly TimeSpan _delay = TimeSpan.FromMilliseconds(400);
 
     private readonly StringBuilder _url = new();
@@ -41,7 +43,10 @@ internal class Parser(ConcurrentQueue<string> queries, ConcurrentQueue<string> s
     {
         _url.Clear();
         _url.Append(Url);
-        _url.Append($"&hl={Config.UserInterfaceLanguage}");
+        if (Config.IsYouTube)
+        {
+            _url.Append("&ds=yt");
+        }
         _url.Append($"&q={HttpUtility.UrlEncode(query)}");
 
         var requestUrl = _url.ToString();

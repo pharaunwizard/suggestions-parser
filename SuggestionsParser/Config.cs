@@ -8,5 +8,7 @@ public static class Config
 
     public const string UserInterfaceLanguage = "en";
     public const string Symbols = "abcdefghijklmnopqrstuvwxyz";
+
+    public const bool IsYouTube = false;
 }
 
