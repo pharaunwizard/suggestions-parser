@@ -1,12 +1,13 @@
-﻿using Serilog;
+﻿using CommandLine;
+using CommandLine.Text;
+using Serilog;
 using Serilog.Events;
-
 using System.Collections.Concurrent;
 using System.Text;
 
 namespace SuggestionsParser;
 
-internal class Program
+internal static class Program
 {
     public static async Task Main(string[] args)
     {
@@ -18,53 +19,127 @@ internal class Program
 
         try
         {
-            var keys = await File.ReadAllLinesAsync(Config.InputKeysFile);
+            var options = ParseOptions(args)!;
+
+            var (success, keys) = await TryReadLinesAsync(Config.InputKeysFile);
+            if (!success)
+                throw new FileNotFoundException($"{Config.InputKeysFile} not found or empty!");
+
             var queries = new ConcurrentQueue<string>();
             var suggestions = new ConcurrentQueue<string>();
 
+            var symbols = await LoadSymbolsAsync();
+
             foreach (var key in keys)
             {
-                foreach (var query in Config.Symbols.Select(symbol => $"{key} {symbol}"))
+                foreach (var query in symbols.Select(symbol => $"{key} {symbol}"))
                 {
                     queries.Enqueue(query);
                 }
             }
+            
+            var parsers = await CreateParsersAsync(options, queries, suggestions);
 
             using var tokenSource = new CancellationTokenSource();
+            
+            var tasks = parsers.Select(p => p.StartAsync(tokenSource.Token)).ToArray();
 
-            var parsers = new List<Task>();
-            if (File.Exists(Config.ProxiesFile))
+            var keyPressTask = Task.Run(() =>
             {
-                var proxies = await File.ReadAllLinesAsync(Config.ProxiesFile);
-                parsers.AddRange(proxies
-                    .Select(proxy => new Parser(queries, suggestions, new Proxy(proxy)))
-                    .Select(parser => parser.StartAsync(tokenSource.Token)));
-            }
-            else
-            {
-                Log.Logger.Information("proxies.txt not found. Parsing will be performed without proxies!");
-                var parser = new Parser(queries, suggestions);
-                parsers.Add(parser.StartAsync(tokenSource.Token));
-            }
+                Console.WriteLine("Press any key to stop.");
+                Console.ReadKey(true);
+                return Task.CompletedTask;
+            });
 
-            Console.ReadKey();
+            await Task.WhenAny(Task.WhenAll(tasks), keyPressTask);
 
             await tokenSource.CancelAsync();
             Log.Logger.Information("Stopping!");
 
-            await Task.WhenAll(parsers);
+            await Task.WhenAll(tasks);
+
             parsers.ForEach(parser => parser.Dispose());
 
             await File.WriteAllLinesAsync(Config.OutputKeysFile, suggestions, Encoding.UTF8);
 
-            Log.Logger.Information($"{suggestions.Count} - All done!");
+            Log.Logger.Information("{SuggestionsCount} - All done!", suggestions.Count);
 
             Console.ReadKey();
         }
         catch (Exception ex)
         {
-            Log.Logger.Fatal(ex.Message);
+            Log.Logger.Fatal(ex, ex.Message);
+        }
+
+        await Log.CloseAndFlushAsync();
+    }
+
+
+    private static async Task<List<Parser>> CreateParsersAsync(Options options, ConcurrentQueue<string> queries,
+        ConcurrentQueue<string> suggestions)
+    {
+        var parsers = new List<Parser>();
+
+        var (success, lines) = await TryReadLinesAsync(Config.ProxiesFile);
+
+        if (success)
+        {
+            parsers.AddRange(lines.Select(proxy => new Parser(options, queries, suggestions, new Proxy(proxy))));
+        }
+        else
+        {
+            Log.Logger.Information("proxies.txt not found. Parsing will be performed without proxies!");
+            parsers.Add(new Parser(options, queries, suggestions));
+        }
+
+        return parsers;
+    }
+
+    private static async Task<string> LoadSymbolsAsync()
+    {
+        var (success, lines) = await TryReadLinesAsync(Config.SymbolsFile);
+        if (success)
+            return lines[0];
+        
+        Log.Logger.Information($"symbols.txt not found. Using default symbols: {Config.DefaultSymbols}");
+        return Config.DefaultSymbols;
+    }
+
+    private static async Task<(bool Success, string[] Lines)> TryReadLinesAsync(string path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return (false, []);
+            }
+
+            var lines = await File.ReadAllLinesAsync(path);
+            return (lines.Length > 0, lines);
+        }
+        catch (IOException)
+        {
+            return (false, []);
         }
     }
-}
 
+    //ToDo: refactoring
+    private static Options? ParseOptions(string[] args)
+    {
+        Options? options = null;
+
+        var parser = new CommandLine.Parser();
+        var parserResult = parser.ParseArguments<Options>(args);
+
+        parserResult
+            .WithParsed(opts => options = opts)
+            .WithNotParsed(errors =>
+            {
+                var helpText = HelpText.AutoBuild(parserResult);
+                Console.WriteLine(helpText);
+                Environment.Exit(1);
+            });
+
+        return options;
+    }
+}

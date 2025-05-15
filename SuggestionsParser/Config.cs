@@ -5,10 +5,8 @@ public static class Config
     public const string ProxiesFile = "proxies.txt";
     public const string InputKeysFile = "keys.txt";
     public const string OutputKeysFile = "output_keys.txt";
+    public const string SymbolsFile = "symbols.txt";
 
-    public const string UserInterfaceLanguage = "en";
-    public const string Symbols = "abcdefghijklmnopqrstuvwxyz";
-
-    public const bool IsYouTube = false;
+    public const string DefaultSymbols = "abcdefghijklmnopqrstuvwxyz";
 }
 
