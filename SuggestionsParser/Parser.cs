@@ -16,18 +16,18 @@ internal class Parser : IDisposable
 
     private readonly StringBuilder _currentUrl = new();
     private readonly HttpClient _client = new();
-    
-    private readonly Options _options;
-    private readonly ConcurrentQueue<string> _queries;
-    private readonly ConcurrentQueue<string> _suggestions;
 
-    public Parser(Options options, ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions, Proxy proxy)
+    private readonly Options _options;
+    private readonly ConcurrentQueue<QueryItem> _queries;
+    private readonly ConcurrentQueue<Suggestion> _suggestions;
+
+    public Parser(Options options, ConcurrentQueue<QueryItem> queries, ConcurrentQueue<Suggestion> suggestions, Proxy proxy)
         : this(options, queries, suggestions)
     {
         _client = Utils.CreateHttpClient(proxy);
     }
 
-    public Parser(Options options, ConcurrentQueue<string> queries, ConcurrentQueue<string> suggestions)
+    public Parser(Options options, ConcurrentQueue<QueryItem> queries, ConcurrentQueue<Suggestion> suggestions)
     {
         _options = options;
         _queries = queries;
@@ -42,23 +42,21 @@ internal class Parser : IDisposable
             if (token.IsCancellationRequested)
                 return;
 
-            if (!_queries.TryDequeue(out var query))
+            if (!_queries.TryDequeue(out var item))
                 continue;
 
-            Log.Logger.Information("Query: {Result}", query);
+            Log.Logger.Information("Query: {Result}", item.Text);
 
-            foreach (var suggestion in await ParseSuggestionsAsync(query))
+            foreach (var suggestion in await ParseSuggestionsAsync(item))
             {
                 _suggestions.Enqueue(suggestion);
             }
 
             await Task.Delay(_delay, CancellationToken.None);
         }
-
-        Log.Logger.Information("Done!");
     }, CancellationToken.None);
 
-    private async Task<List<string>> ParseSuggestionsAsync(string query)
+    private async Task<List<Suggestion>> ParseSuggestionsAsync(QueryItem item)
     {
         _currentUrl.Clear();
         _currentUrl.Append(_defaultUrl);
@@ -67,31 +65,39 @@ internal class Parser : IDisposable
             _currentUrl.Append("&ds=yt");
         }
 
-        _currentUrl.Append($"&q={HttpUtility.UrlEncode(query)}");
+        _currentUrl.Append($"&q={HttpUtility.UrlEncode(item.Text)}");
 
         var requestUrl = _currentUrl.ToString();
 
-        using var message = new HttpRequestMessage();
-        message.Method = HttpMethod.Get;
-        message.RequestUri = new Uri(requestUrl);
+        try
+        {
+            using var message = new HttpRequestMessage();
+            message.Method = HttpMethod.Get;
+            message.RequestUri = new Uri(requestUrl);
 
-        using var response = await _client.SendAsync(message);
-        var responseText = await response.Content.ReadAsStringAsync();
+            using var response = await _client.SendAsync(message);
+            var responseText = await response.Content.ReadAsStringAsync();
 
-        responseText = Regex.Unescape(responseText);
+            responseText = Regex.Unescape(responseText);
 
-        return ExtractSuggestions(responseText);
+            return ExtractSuggestions(responseText);
+        }
+        catch (Exception ex)
+        {
+            Log.Logger.Warning("Request failed for '{Query}': {Message}", item.Text, ex.Message);
+            return [];
+        }
     }
 
-    private static List<string> ExtractSuggestions(string response)
+    private static List<Suggestion> ExtractSuggestions(string response)
     {
         try
         {
             using var document = JsonDocument.Parse(response);
             var suggestions = document.RootElement[1]
                 .EnumerateArray()
-                .Select(element => element.GetString()?.Trim() ?? string.Empty)
-                .Where(s => !string.IsNullOrEmpty(s))
+                .Select((element, index) => new Suggestion(element.GetString()?.Trim() ?? string.Empty, index))
+                .Where(s => !string.IsNullOrEmpty(s.Text))
                 .ToList();
             return suggestions;
         }

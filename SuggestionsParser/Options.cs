@@ -1,7 +1,15 @@
 ﻿using CommandLine;
-using CommandLine.Text;
 
 namespace SuggestionsParser;
+
+public enum ParseMode
+{
+    /// <summary>Классический побуквенный перебор (key + a-z), один проход, плоский вывод.</summary>
+    Simple,
+
+    /// <summary>Умный сбор: модификаторы (префикс+суффикс) + a-z перебор + частотные тиры + trend-diff. Один проход без рекурсии.</summary>
+    Smart
+}
 
 public class Options
 {
@@ -13,4 +21,12 @@ public class Options
 
     [Option('y', "youtube", Required = true, HelpText = "Use for YouTube suggestions (true or false)")]
     public bool IsYouTube { get; set; }
+
+    [Option('m', "mode", Required = false, Default = "simple",
+        HelpText = "Mode: 'simple' (classic a-z brute force, flat output) or 'smart' (modifiers prefix+suffix + a-z + frequency tiers + trend diff).")]
+    public string Mode { get; set; } = "simple";
+
+    [Option('t', "trend", Required = false, Default = false,
+        HelpText = "[smart only] Trend mode: also write only the rising suggestions (new since last run) to trends.txt.")]
+    public bool TrendMode { get; set; }
 }
